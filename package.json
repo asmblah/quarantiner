@@ -1,0 +1,47 @@
+{
+  "version": "0.1.0-alpha",
+  "name": "quarantiner",
+  "description": "A script isolator that runs scripts inside a sandbox iframe",
+  "keywords": [
+    "quarantine",
+    "sandbox"
+  ],
+  "homepage": "https://github.com/asmblah/quarantiner",
+  "author": "Dan Phillimore <dan@ovms.co> (https://github.com/asmblah)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asmblah/quarantiner"
+  },
+  "bugs": {
+    "email": "dan@ovms.co",
+    "url": "https://github.com/asmblah/quarantiner/issues"
+  },
+  "main": "dist/quarantiner.js",
+  "types": "dist/quarantiner.d.ts",
+  "files": [
+    "dist/**",
+    "src/**",
+    "MIT-LICENSE.txt",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rollup -c",
+    "build:clean": "rm -rf dist/*",
+    "mocha": "ts-mocha -r mocha-bootstrap --recursive 'test/integration/**/*Test.ts' 'test/unit/**/*Test.ts'",
+    "lint:eslint:check": "eslint '{src,test}/**/*.ts' --max-warnings=0",
+    "lint:eslint:fix": "eslint '{src,test}/**/*.ts' --fix",
+    "lint:tsc:check": "tsc --noEmit",
+    "prepublishOnly": "npm test && npm run build:clean && npm run build",
+    "test": "npm run lint:eslint:check && npm run lint:tsc:check && npm run mocha"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "buildbelt": "^0.1.0",
+    "rollup": "^4.18.0"
+  },
+  "engines": {
+    "node": ">=8"
+  },
+  "license": "MIT"
+}

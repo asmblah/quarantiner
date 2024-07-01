@@ -1,0 +1,7 @@
+{
+  "extends": "buildbelt/tsconfig.json",
+  "compilerOptions": {
+    "inlineSources": true,
+    "outDir": "dist/"
+  }
+}
