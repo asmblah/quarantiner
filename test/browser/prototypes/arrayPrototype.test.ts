@@ -7,14 +7,15 @@
  * https://github.com/asmblah/quarantiner/raw/main/MIT-LICENSE.txt
  */
 
-// import plugin from '../../../dist/plugin';
-// import { rollup } from 'rollup';
+import { Entrypoint } from '../../../src/quarantiner';
 
-describe.skip('Array.prototype isolation', () => {
+describe('Array.prototype isolation', () => {
     it('modifying Array.prototype should not affect the main window', async () => {
-        // const bundle = await rollup({
-        //     input: import.meta.resolve('./fixtures/arrayPrototypeEntry.ts'),
-        //     plugins: [plugin()],
-        // });
+        await import('../../../dist/quarantiner.umd.js');
+
+        expect(
+            typeof (window as typeof window & { quarantiner: Entrypoint })
+                .quarantiner,
+        ).to.equal('function');
     });
 });

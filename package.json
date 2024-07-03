@@ -25,20 +25,28 @@
     "README.md"
   ],
   "scripts": {
-    "build": "rollup -c",
+    "build": "vite build",
     "build:clean": "rm -rf dist/*",
-    "mocha": "ts-mocha -r mocha-bootstrap --recursive 'test/integration/**/*Test.ts' 'test/unit/**/*Test.ts'",
-    "lint:eslint:check": "eslint '{src,test}/**/*.ts' --max-warnings=0",
-    "lint:eslint:fix": "eslint '{src,test}/**/*.ts' --fix",
+    "lint:eslint:check": "eslint '{src,test}/**/*.{ts,tsx}' '*.{js,jsx,mjs,mts,ts,tsx}' --max-warnings=0",
+    "lint:eslint:fix": "eslint '{src,test}/**/*.{ts,tsx}' '*.{js,jsx,mjs,mts,ts,tsx}' --fix",
     "lint:tsc:check": "tsc --noEmit",
     "prepublishOnly": "npm test && npm run build:clean && npm run build",
-    "test": "npm run lint:eslint:check && npm run lint:tsc:check && npm run mocha"
+    "test": "npm run lint:eslint:check && npm run lint:tsc:check && npm run vitest",
+    "vitest": "vitest"
   },
   "devDependencies": {
-    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@babel/plugin-transform-runtime": "^7.24.7",
+    "@babel/preset-env": "^7.24.7",
+    "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-typescript": "^11.1.6",
+    "@vitejs/plugin-legacy": "^5.4.1",
+    "@vitest/browser": "^1.6.0",
     "buildbelt": "^0.1.0",
-    "rollup": "^4.18.0"
+    "playwright": "^1.45.0",
+    "terser": "^5.31.1",
+    "vite": "^5.3.2",
+    "vite-plugin-dts": "^3.9.1",
+    "vitest": "^1.6.0"
   },
   "engines": {
     "node": ">=8"

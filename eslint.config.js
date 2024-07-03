@@ -7,4 +7,12 @@
  * https://github.com/asmblah/quarantiner/raw/main/MIT-LICENSE.txt
  */
 
-module.exports = require('buildbelt/eslint.config');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+module.exports = require('buildbelt/eslint.config').map((config) =>
+    Object.assign(config, {
+        files: [
+            '{src,test}/**/*.{js,jsx,mjs,mts,ts,tsx}',
+            '*.{js,jsx,mjs,mts,ts,tsx}',
+        ],
+    }),
+);

@@ -19,7 +19,7 @@ type GlobalFunction = (...args: unknown[]) => unknown;
 type WritableGlobalObject = {
     [property: string]: GlobalFunction;
 };
-type WrapperFunction = (
+export type WrapperFunction = (
     parent: Window,
     self: Window,
     top: Window,
@@ -27,14 +27,21 @@ type WrapperFunction = (
 ) => void;
 
 // Signature for the `globalThis.quarantiner(...)` entrypoint function.
-type Entrypoint = (wrapper: WrapperFunction, config: ConfigOptions) => void;
+export type Entrypoint = (
+    wrapper: WrapperFunction,
+    config: ConfigOptions,
+) => void;
 
 const mainWindow = window;
 
 // Type .contentWindow such that global functions may be called.
 let writableSandboxWindow: WritableGlobalObject | null = null;
 
-const sandboxeeSpecs: { src: string; onload: () => void }[] = [];
+const sandboxeeSpecs: {
+    src: string;
+    onload: () => void;
+    onerror: (error: unknown) => void;
+}[] = [];
 
 const getGlobal = (name: string) => {
     return (writableSandboxWindow as WritableGlobalObject)[name];
@@ -158,10 +165,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(iframe);
 });
 
-const mainContextEntrypoint: Entrypoint = (
+const mainContextEntrypoint: Entrypoint = async (
     _wrapper: WrapperFunction,
     config: ConfigOptions,
-): void => {
+): Promise<void> => {
     const currentScript = document.currentScript ?? null;
 
     if (currentScript === null) {
@@ -175,50 +182,74 @@ const mainContextEntrypoint: Entrypoint = (
     // Capture the src of the script, as we will need to load it again inside the sandbox iframe.
     const currentScriptSrc = (currentScript as HTMLScriptElement).src;
 
-    let loaded = false;
+    return new Promise((resolve, reject) => {
+        let loaded = false;
 
-    for (const globalName of Object.keys(config.globals)) {
-        // Queue of calls to the global function before it is defined
-        // by the code when run inside the sandbox, to be replayed when defined.
-        const queue: unknown[][] = [];
+        for (const globalName of Object.keys(config.globals)) {
+            // Queue of calls to the global function before it is defined
+            // by the code when run inside the sandbox, to be replayed when defined.
+            const queue: {
+                args: unknown[];
+                resolve: (value: unknown) => void;
+                reject: (reason: unknown) => void;
+            }[] = [];
 
-        if (config.globals[globalName].type !== 'function') {
-            throw new Error('Only functions supported for now');
-        }
+            if (config.globals[globalName].type !== 'function') {
+                throw new Error('Only functions supported for now');
+            }
 
-        sandboxeeSpecs.push({
-            src: currentScriptSrc,
-            onload() {
-                loaded = true;
+            sandboxeeSpecs.push({
+                src: currentScriptSrc,
 
-                const globalValue = getGlobal(globalName);
+                onerror(error: unknown) {
+                    // Script failed to load inside the sandbox iframe.
+                    reject(error);
+                },
 
-                for (const args of queue) {
-                    globalValue(...args);
-                }
+                onload() {
+                    // Script loaded inside the sandbox iframe successfully.
+                    loaded = true;
+                    resolve();
 
-                queue.length = 0;
-            },
-        });
+                    const globalValue = getGlobal(globalName);
 
-        Object.defineProperty(mainWindow, globalName, {
-            get() {
-                return (...args: unknown[]) => {
-                    if (loaded) {
-                        getGlobal(globalName)(...args);
-                    } else {
-                        queue.push(args);
+                    for (const { args, resolve, reject } of queue) {
+                        try {
+                            resolve(globalValue(...args));
+                        } catch (error) {
+                            reject(error);
+                        }
                     }
-                };
-            },
 
-            set() {
-                throw new Error(
-                    `Quarantiner :: An attempt was made to overwrite proxied global ${globalName}`,
-                );
-            },
-        });
-    }
+                    queue.length = 0;
+                },
+            });
+
+            Object.defineProperty(mainWindow, globalName, {
+                get() {
+                    return async (...args: unknown[]) => {
+                        if (loaded) {
+                            return getGlobal(globalName)(...args);
+                        }
+
+                        return new Promise((resolve, reject) => {
+                            queue.push({
+                                args,
+                                resolve,
+                                reject,
+                            });
+                        });
+                    };
+                },
+
+                set() {
+                    throw new Error(
+                        `Quarantiner :: An attempt was made to overwrite proxied global ${globalName}`,
+                    );
+                },
+            });
+        }
+    });
 };
 
 export default mainContextEntrypoint;

@@ -1,7 +1,12 @@
 {
   "extends": "buildbelt/tsconfig.json",
   "compilerOptions": {
+    "declarationMap": true,
     "inlineSources": true,
-    "outDir": "dist/"
-  }
+    "isolatedModules": true,
+    "module": "esnext",
+    "outDir": "dist/",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/"]
 }
