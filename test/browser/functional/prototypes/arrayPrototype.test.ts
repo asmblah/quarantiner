@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadJsAsScript, loadScript } from '../../../harness/tools';
+import { loadJsAsScript, loadScript } from 'buildbelt';
 
 describe('Array.prototype isolation', () => {
     let quarantiner: UmdGlobal;

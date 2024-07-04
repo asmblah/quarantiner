@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadJsAsScript, loadScript } from '../../../harness/tools';
+import { loadJsAsScript, loadScript } from 'buildbelt';
 
 describe('Document DOM element handling', () => {
     let quarantiner: UmdGlobal;
