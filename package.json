@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "name": "quarantiner",
   "description": "A script isolator that runs scripts inside a sandbox iframe",
   "keywords": [
