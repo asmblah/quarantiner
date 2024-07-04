@@ -32,7 +32,7 @@
     "lint:eslint:fix": "eslint '{src,test}/**/*.{ts,tsx}' '*.{js,jsx,mjs,mts,ts,tsx}' --fix",
     "lint:tsc:check": "tsc --noEmit",
     "prepublishOnly": "npm test && npm run build:clean && npm run build",
-    "test": "npm run lint:eslint:check && npm run lint:tsc:check && npm run vitest:ci",
+    "test": "npm run lint:eslint:check && npm run lint:tsc:check && npm run build:dev && npm run vitest:ci",
     "vitest:ci": "vitest run",
     "vitest:watch": "vitest watch"
   },
