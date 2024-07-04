@@ -49,7 +49,6 @@ export default defineConfig(({ mode }) => ({
     },
 
     test: {
-        globals: true,
         workspace: 'vitest.workspace.mts',
     },
 }));

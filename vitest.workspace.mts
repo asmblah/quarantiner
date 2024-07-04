@@ -12,6 +12,7 @@ import { defineWorkspace } from 'vitest/config';
 export default defineWorkspace([
     {
         extends: './vite.config.mts',
+        publicDir: './dist', // Make built assets available during tests.
         test: {
             name: 'browser',
             include: ['test/browser/**/*.test.ts'],

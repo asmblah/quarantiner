@@ -4,9 +4,9 @@
     "declarationMap": true,
     "inlineSources": true,
     "isolatedModules": true,
+    "lib": ["dom", "esnext"],
     "module": "esnext",
-    "outDir": "dist/",
-    "types": ["node", "vitest/globals"]
+    "outDir": "dist/"
   },
   "include": ["src/"]
 }

@@ -25,23 +25,25 @@
     "README.md"
   ],
   "scripts": {
-    "build": "vite build",
+    "build:prod": "vite build",
+    "build:dev": "vite build --mode=development",
     "build:clean": "rm -rf dist/*",
     "lint:eslint:check": "eslint '{src,test}/**/*.{ts,tsx}' '*.{js,jsx,mjs,mts,ts,tsx}' --max-warnings=0",
     "lint:eslint:fix": "eslint '{src,test}/**/*.{ts,tsx}' '*.{js,jsx,mjs,mts,ts,tsx}' --fix",
     "lint:tsc:check": "tsc --noEmit",
     "prepublishOnly": "npm test && npm run build:clean && npm run build",
-    "test": "npm run lint:eslint:check && npm run lint:tsc:check && npm run vitest",
-    "vitest": "vitest"
+    "test": "npm run lint:eslint:check && npm run lint:tsc:check && npm run vitest:ci",
+    "vitest:ci": "vitest run",
+    "vitest:watch": "vitest watch"
   },
   "devDependencies": {
     "@babel/plugin-transform-runtime": "^7.24.7",
     "@babel/preset-env": "^7.24.7",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-typescript": "^11.1.6",
-    "@vitejs/plugin-legacy": "^5.4.1",
     "@vitest/browser": "^1.6.0",
     "buildbelt": "^0.1.0",
+    "core-js": "^3.37.1",
     "playwright": "^1.45.0",
     "terser": "^5.31.1",
     "vite": "^5.3.2",

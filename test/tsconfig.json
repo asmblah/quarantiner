@@ -5,5 +5,5 @@
     "module": "esnext",
     "target": "esnext"
   },
-  "include": ["src/", "test/"]
+  "include": ["../src/", "../test/"]
 }

@@ -7,211 +7,112 @@
  * https://github.com/asmblah/quarantiner/raw/main/MIT-LICENSE.txt
  */
 
-type ConfigOptions = {
-    globals: {
-        [name: string]: {
-            type: 'function' | 'object';
-        };
-    };
-};
-
-type GlobalFunction = (...args: unknown[]) => unknown;
-type WritableGlobalObject = {
-    [property: string]: GlobalFunction;
-};
-export type WrapperFunction = (
-    parent: Window,
-    self: Window,
-    top: Window,
-    window: Window,
-) => void;
-
-// Signature for the `globalThis.quarantiner(...)` entrypoint function.
-export type Entrypoint = (
-    wrapper: WrapperFunction,
-    config: ConfigOptions,
-) => void;
+import Sandbox from './Sandbox/Sandbox';
+import SandboxRepository from './Sandbox/SandboxRepository';
+import SandboxCreator from './Sandbox/SandboxCreator';
+import SandboxInitialiser from './Sandbox/SandboxInitialiser';
 
 const mainWindow = window;
 
-// Type .contentWindow such that global functions may be called.
-let writableSandboxWindow: WritableGlobalObject | null = null;
+const sandboxGetter = (name: string = 'default'): Promise<Sandbox> =>
+    sandboxRepository.getSandbox(name);
 
-const sandboxeeSpecs: {
-    src: string;
-    onload: () => void;
-    onerror: (error: unknown) => void;
-}[] = [];
-
-const getGlobal = (name: string) => {
-    return (writableSandboxWindow as WritableGlobalObject)[name];
-};
-
-/*
- * Create a sandbox to execute JavaScript in, separate from the main browsing context.
- */
-document.addEventListener('DOMContentLoaded', () => {
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-
-    iframe.addEventListener('load', () => {
-        const contentWindow = iframe.contentWindow as Window;
-        const contentDocument = iframe.contentDocument as Document;
-
-        writableSandboxWindow =
-            contentWindow as unknown as WritableGlobalObject;
-        const sandboxWindow = contentWindow as Window & typeof globalThis;
-
-        const proxySet = new Set();
-
-        const proxyMap = new Map();
-        const proxyValue = (target: object, property: string | symbol) => {
-            const value = (target as { [name: string]: unknown })[
-                property as string
-            ];
-            const proxiedValue = proxyMap.has(value)
-                ? proxyMap.get(value)
-                : value;
-
-            // TODO: Cache bound methods in a separate WeakMap tree or similar(?).
-            //       Modifications to .prototype will be lost at the moment.
-            // TODO2: Actually the above shouldn't be an issue now, as the Proxy
-            //        will handle routing .prototype lookups to the original function -
-            //        need to test (!) but caching still required for perf.
-            return typeof proxiedValue === 'function'
-                ? new Proxy(proxiedValue, {
-                      apply(
-                          _target: unknown,
-                          thisArg: unknown,
-                          args: unknown[],
-                      ): unknown {
-                          return proxiedValue.apply(
-                              proxySet.has(thisArg) ? target : thisArg,
-                              args,
-                          );
-                      },
-                  })
-                : proxiedValue;
-        };
-
-        const createWindowProxy = (window: Window) => {
-            const proxy = new Proxy(window, {
-                get(target: Window, property: string | symbol): unknown {
-                    return proxyValue(target, property);
-                },
-            });
-            proxySet.add(proxy);
-
-            return proxy;
-        };
-
-        const mainWindowProxy = createWindowProxy(mainWindow);
-        const sandboxWindowProxy = createWindowProxy(sandboxWindow);
-
-        const createDocumentProxy = (document: Document) => {
-            const proxy = new Proxy(document, {
-                get(target: object, property: string | symbol): unknown {
-                    return proxyValue(target, property);
-                },
-            });
-            proxySet.add(proxy);
-
-            return proxy;
-        };
-
-        const mainDocumentProxy = createDocumentProxy(mainWindow.document);
-        // It should not (easily) be possible to access the sandbox document.
-
-        proxyMap.set(mainWindow, mainWindowProxy);
-        proxyMap.set(sandboxWindow, sandboxWindowProxy);
-        proxyMap.set(mainWindow.Array, sandboxWindow.Array);
-        proxyMap.set(mainWindow.Boolean, sandboxWindow.Boolean);
-        proxyMap.set(mainWindow.Number, sandboxWindow.Number);
-        proxyMap.set(mainWindow.Object, sandboxWindow.Object);
-        proxyMap.set(mainWindow.String, sandboxWindow.String);
-
-        proxyMap.set(mainWindow.document, mainDocumentProxy);
-        // Sandbox document should not (easily) be accessible - redirect to the main document's.
-        proxyMap.set(sandboxWindow.document, mainDocumentProxy);
-
-        const sandboxContextEntrypoint: Entrypoint = (
-            wrapper: WrapperFunction,
-        ): void => {
-            wrapper(
-                mainWindow.parent, // TODO: Sandbox `parent.Array.prototype` access etc.
-                sandboxWindowProxy,
-                mainWindow.top as Window, // TODO: Sandbox `top.Array.prototype` access etc.
-                sandboxWindowProxy,
-            );
-        };
-
-        writableSandboxWindow.quarantiner =
-            sandboxContextEntrypoint as GlobalFunction;
-
-        for (const sandboxeeSpec of sandboxeeSpecs) {
-            const script = contentDocument.createElement('script');
-
-            script.addEventListener('load', () => {
-                sandboxeeSpec.onload();
-            });
-
-            script.src = sandboxeeSpec.src;
-
-            contentDocument.body.appendChild(script);
-        }
-    });
-
-    // iframe.srcdoc = '<html><head></head><body>Hello</body></html>';
-    document.body.appendChild(iframe);
-});
+const sandboxRepository = new SandboxRepository(
+    new SandboxCreator(),
+    new SandboxInitialiser(mainWindow, sandboxGetter),
+);
 
 const mainContextEntrypoint: Entrypoint = async (
     _wrapper: WrapperFunction,
-    config: ConfigOptions,
+    config: ConfigOptions = { globals: {}, sandbox: 'default' },
 ): Promise<void> => {
     const currentScript = document.currentScript ?? null;
 
     if (currentScript === null) {
-        throw new Error('Quarantiner() :: No current script');
+        throw new Error('Quarantiner :: No current script');
     }
 
     if (currentScript.nodeName !== 'SCRIPT') {
-        throw new Error('Quarantiner() :: Not called from a script');
+        throw new Error('Quarantiner :: Not called from a script');
     }
+
+    const sandboxName = config.sandbox;
+
+    const sandboxDeclaration = sandboxRepository.declareSandbox(sandboxName);
+    let sandbox: Sandbox | null = null;
+
+    sandboxRepository.getSandbox(sandboxName).then((initialisedSandbox) => {
+        sandbox = initialisedSandbox;
+
+        sandbox.addPendingSandboxee(pendingSandboxeePromise);
+    });
 
     // Capture the src of the script, as we will need to load it again inside the sandbox iframe.
     const currentScriptSrc = (currentScript as HTMLScriptElement).src;
 
-    return new Promise((resolve, reject) => {
-        let loaded = false;
+    let loaded = false;
+    const queuesByGlobalName: { [globalName: string]: CallQueue } = {};
 
-        for (const globalName of Object.keys(config.globals)) {
-            // Queue of calls to the global function before it is defined
-            // by the code when run inside the sandbox, to be replayed when defined.
-            const queue: {
-                args: unknown[];
-                resolve: (value: unknown) => void;
-                reject: (reason: unknown) => void;
-            }[] = [];
+    for (const globalName of Object.keys(config.globals)) {
+        // Queue of calls to the global function before it is defined
+        // by the code when run inside the sandbox, to be replayed when defined.
+        const queue: CallQueue = [];
 
-            if (config.globals[globalName].type !== 'function') {
-                throw new Error('Only functions supported for now');
-            }
+        queuesByGlobalName[globalName] = queue;
 
-            sandboxeeSpecs.push({
-                src: currentScriptSrc,
+        if (config.globals[globalName].type !== 'function') {
+            throw new Error('Quarantiner :: Only functions supported for now');
+        }
 
-                onerror(error: unknown) {
-                    // Script failed to load inside the sandbox iframe.
-                    reject(error);
-                },
+        Object.defineProperty(mainWindow, globalName, {
+            get() {
+                return async (...args: unknown[]) => {
+                    if (loaded) {
+                        const globalValue = (sandbox as Sandbox).getGlobal(
+                            globalName,
+                        ) as GlobalFunction;
 
-                onload() {
-                    // Script loaded inside the sandbox iframe successfully.
-                    loaded = true;
-                    resolve();
+                        return globalValue(...args);
+                    }
 
-                    const globalValue = getGlobal(globalName);
+                    return new Promise((resolve, reject) => {
+                        queue.push({
+                            args,
+                            resolve,
+                            reject,
+                        });
+                    });
+                };
+            },
+
+            set() {
+                throw new Error(
+                    `Quarantiner :: An attempt was made to overwrite proxied global ${globalName}`,
+                );
+            },
+        });
+    }
+
+    const pendingSandboxeePromise = new Promise<void>((resolve, reject) => {
+        sandboxDeclaration.addSandboxeeSpec({
+            src: currentScriptSrc,
+
+            onerror(error: unknown) {
+                // Script failed to load inside the sandbox iframe.
+                reject(error);
+            },
+
+            onload() {
+                // Script loaded inside the sandbox iframe successfully.
+                loaded = true;
+                resolve();
+
+                // Replay any calls that happened against this global during load now that the sandbox has loaded.
+                for (const globalName of Object.keys(config.globals)) {
+                    const queue = queuesByGlobalName[globalName];
+                    const globalValue = (sandbox as Sandbox).getGlobal(
+                        globalName,
+                    ) as GlobalFunction;
 
                     for (const { args, resolve, reject } of queue) {
                         try {
@@ -222,34 +123,14 @@ const mainContextEntrypoint: Entrypoint = async (
                     }
 
                     queue.length = 0;
-                },
-            });
-
-            Object.defineProperty(mainWindow, globalName, {
-                get() {
-                    return async (...args: unknown[]) => {
-                        if (loaded) {
-                            return getGlobal(globalName)(...args);
-                        }
-
-                        return new Promise((resolve, reject) => {
-                            queue.push({
-                                args,
-                                resolve,
-                                reject,
-                            });
-                        });
-                    };
-                },
-
-                set() {
-                    throw new Error(
-                        `Quarantiner :: An attempt was made to overwrite proxied global ${globalName}`,
-                    );
-                },
-            });
-        }
+                }
+            },
+        });
     });
+
+    await pendingSandboxeePromise;
 };
 
-export default mainContextEntrypoint;
+export const getSandbox = sandboxGetter;
+
+export const quarantine = mainContextEntrypoint;
