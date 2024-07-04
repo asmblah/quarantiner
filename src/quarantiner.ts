@@ -8,9 +8,9 @@
  */
 
 import Sandbox from './Sandbox/Sandbox';
-import SandboxRepository from './Sandbox/SandboxRepository';
 import SandboxCreator from './Sandbox/SandboxCreator';
 import SandboxInitialiser from './Sandbox/SandboxInitialiser';
+import SandboxRepository from './Sandbox/SandboxRepository';
 
 const mainWindow = window;
 

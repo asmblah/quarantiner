@@ -37,6 +37,10 @@ type GlobalObjectWithUmdGlobal = {
 
 type GlobalObject = WritableGlobalObject | GlobalObjectWithUmdGlobal;
 
+type WritableObject = {
+    [property: string]: unknown;
+};
+
 type SandboxeeSpec = {
     src: string;
     onload: () => void;

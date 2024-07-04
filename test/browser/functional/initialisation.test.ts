@@ -8,7 +8,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { loadScript } from '../harness/tools';
+import { loadScript } from '../../harness/tools';
 
 describe('Quarantiner library initialisation', () => {
     beforeEach(async () => {
