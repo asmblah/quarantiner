@@ -10,32 +10,36 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadJsAsScript, loadScript } from 'buildbelt';
 
-describe('Array.prototype isolation', () => {
+describe('Proxied declared globals handling', () => {
     let quarantiner: UmdGlobal;
+    let writableWindow: WritableGlobalObject;
 
     beforeEach(async () => {
         // Load Quarantiner library itself in the test runner document.
         await loadScript('/dist/quarantiner.umd.js');
 
+        writableWindow = window as unknown as WritableGlobalObject;
         quarantiner = (window as typeof window & GlobalObjectWithUmdGlobal)
             .quarantiner;
     });
 
-    it("modifying Array.prototype should not affect the main window's Array.prototype", async () => {
+    it('should synchronously define globals declared by the config', async () => {
         await loadJsAsScript(`
         quarantiner.quarantine(function (parent, self, top, window) {
-            window.Array.prototype.myValue = 21;
-        });
+            window.myGlobal = function () {
+                return 'my result';
+            };
+        }, {globals: {myGlobal: {type: 'function'}}});
+        
+        window.myResult = typeof window.myGlobal;
         `);
         // Wait for the script above to be re-executed inside the sandbox.
-        const sandbox = await quarantiner.getSandbox();
+        await quarantiner.getSandbox();
 
-        type ArrayConstructor = { prototype: { myValue: number } };
-
-        expect((window.Array as unknown as ArrayConstructor).prototype.myValue)
-            .to.be.undefined;
-        expect(
-            (sandbox.getGlobal('Array') as ArrayConstructor).prototype.myValue,
-        ).to.equal(21);
+        expect(writableWindow.myResult).to.equal('function');
     });
+
+    it.skip(
+        'should replay any calls made before the sandbox was fully initialised',
+    );
 });

@@ -31,8 +31,7 @@ describe('Document DOM element handling', () => {
             window.document.body.appendChild(div);
         });
         `);
-        const sandbox = await quarantiner.getSandbox();
-        await sandbox.getPendingSandboxeePromise(); // Wait for the script above to be re-executed inside the sandbox.
+        await quarantiner.getSandbox(); // Wait for the script above to be re-executed inside the sandbox.
         const div = document.getElementById('myDiv');
 
         expect(div).to.be.an.instanceOf(HTMLDivElement);

@@ -8,7 +8,6 @@
  */
 
 import Sandbox from './Sandbox';
-import SandboxDeclaration from './SandboxDeclaration';
 
 export default class SandboxInitialiser {
     public constructor(
@@ -19,13 +18,9 @@ export default class SandboxInitialiser {
     /**
      * Sets up the sandbox, installing proxies for globals etc.
      */
-    public initialise(
-        declaration: SandboxDeclaration,
-        sandbox: Sandbox,
-    ): Promise<void> {
+    public initialise(sandbox: Sandbox): void {
         const mainWindow = this.mainWindow;
         const contentWindow = sandbox.getContentWindow();
-        const contentDocument = sandbox.getContentDocument();
 
         const writableSandboxWindow = contentWindow as unknown as GlobalObject;
         const sandboxWindow = contentWindow as Window & typeof globalThis;
@@ -113,51 +108,11 @@ export default class SandboxInitialiser {
             );
         };
 
+        // Define the Quarantiner API on the sandbox window/global object,
+        // for when the script re-executes inside the sandbox.
         writableSandboxWindow.quarantiner = {
             getSandbox: this.getSandbox,
             quarantine: sandboxContextEntrypoint as GlobalFunction,
         };
-
-        /*
-         * Wait for all sandboxee scripts executed so far to either succeed or fail,
-         * resolving the promise regardless once all have executed.
-         *
-         * Note that it is possible for further scripts to execute and call .quarantine(...)
-         * after this point, in which case it is necessary to:
-         *
-         * `await quarantiner.getSandbox(...).getPendingSandboxeePromise()`.
-         */
-        return new Promise((resolve) => {
-            const sandboxeeSpecs = declaration.getSandboxeeSpecs();
-            let pending = sandboxeeSpecs.length;
-
-            for (const sandboxeeSpec of sandboxeeSpecs) {
-                const script = contentDocument.createElement('script');
-
-                script.addEventListener('load', () => {
-                    sandboxeeSpec.onload();
-
-                    pending--;
-
-                    if (pending === 0) {
-                        resolve();
-                    }
-                });
-
-                script.addEventListener('error', (event) => {
-                    sandboxeeSpec.onerror(event.error);
-
-                    pending--;
-
-                    if (pending === 0) {
-                        resolve();
-                    }
-                });
-
-                script.src = sandboxeeSpec.src;
-
-                contentDocument.body.appendChild(script);
-            }
-        });
     }
 }

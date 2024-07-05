@@ -9,7 +9,8 @@
 
 export default class Sandbox {
     private readonly globalObject: WritableGlobalObject;
-    private pendingSandboxeesPromise: Promise<void>;
+    private pendingSandboxeeSpecs: SandboxeeSpec[] = [];
+    private pendingSandboxeesPromise: Promise<Sandbox>;
 
     public constructor(
         private readonly iframe: HTMLIFrameElement,
@@ -17,18 +18,7 @@ export default class Sandbox {
     ) {
         this.globalObject = iframe.contentWindow as typeof window &
             WritableGlobalObject;
-
-        this.pendingSandboxeesPromise = Promise.resolve();
-    }
-
-    /**
-     * Adds a promise for a pending sandboxee script,
-     * allowing external code to await any pending loads at a given point.
-     */
-    public addPendingSandboxee(promise: Promise<void>): void {
-        this.pendingSandboxeesPromise = this.pendingSandboxeesPromise.then(
-            () => promise,
-        );
+        this.pendingSandboxeesPromise = Promise.resolve(this);
     }
 
     /**
@@ -70,7 +60,66 @@ export default class Sandbox {
      * Fetches the promise for all currently pending sandboxee scripts,
      * allowing external code to await any pending loads at a given point.
      */
-    public getPendingSandboxeePromise(): Promise<void> {
+    public getPendingSandboxeePromise(): Promise<Sandbox> {
         return this.pendingSandboxeesPromise;
+    }
+
+    /**
+     * Adds a script to be loaded inside the sandbox.
+     */
+    public async loadScript(scriptSrc: string): Promise<Sandbox> {
+        const alreadyProcessing = this.pendingSandboxeeSpecs.length > 0;
+        const contentDocument = this.getContentDocument();
+
+        const promise = new Promise<Sandbox>((resolve, reject) => {
+            this.pendingSandboxeeSpecs.push({
+                src: scriptSrc,
+                onload: () => {
+                    resolve(this);
+                },
+                onerror: (error: unknown) => {
+                    reject(error);
+                },
+            });
+        });
+
+        this.pendingSandboxeesPromise = this.pendingSandboxeesPromise.then(
+            () => promise,
+        );
+
+        if (alreadyProcessing) {
+            return promise;
+        }
+
+        const dequeue = () => {
+            const sandboxeeSpec =
+                this.pendingSandboxeeSpecs.shift() as SandboxeeSpec;
+
+            const script = contentDocument.createElement('script');
+
+            script.addEventListener('load', () => {
+                sandboxeeSpec.onload();
+
+                if (this.pendingSandboxeeSpecs.length > 0) {
+                    dequeue();
+                }
+            });
+
+            script.addEventListener('error', (event) => {
+                sandboxeeSpec.onerror(event.error);
+
+                if (this.pendingSandboxeeSpecs.length > 0) {
+                    dequeue();
+                }
+            });
+
+            script.src = sandboxeeSpec.src;
+
+            contentDocument.body.appendChild(script);
+        };
+
+        dequeue();
+
+        return promise;
     }
 }

@@ -8,21 +8,20 @@
  */
 
 import Sandbox from './Sandbox';
-import SandboxDeclaration from './SandboxDeclaration';
 
 export default class SandboxCreator {
     /**
      * Creates a new <iframe>-based sandbox to execute JavaScript in,
      * separate from the main browsing context.
      */
-    public async create(declaration: SandboxDeclaration): Promise<Sandbox> {
+    public async create(name: string): Promise<Sandbox> {
         return new Promise<Sandbox>((resolve) => {
             const onReady = () => {
                 const iframe = document.createElement('iframe');
                 iframe.style.display = 'none';
 
                 iframe.addEventListener('load', () => {
-                    resolve(new Sandbox(iframe, declaration.getName()));
+                    resolve(new Sandbox(iframe, name));
                 });
 
                 document.body.appendChild(iframe);

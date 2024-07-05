@@ -9,16 +9,10 @@
 
 import Sandbox from './Sandbox';
 import SandboxCreator from './SandboxCreator';
-import SandboxDeclaration from './SandboxDeclaration';
 import SandboxInitialiser from './SandboxInitialiser';
 
 export default class SandboxRepository {
-    private readonly sandboxDeclarations: Record<string, SandboxDeclaration> =
-        {};
-    private readonly sandboxInitialisationPromises: Record<
-        string,
-        Promise<Sandbox>
-    > = {};
+    private readonly sandboxPromises: Record<string, Promise<Sandbox>> = {};
 
     public constructor(
         private readonly sandboxCreator: SandboxCreator,
@@ -28,43 +22,63 @@ export default class SandboxRepository {
     /**
      * Declares a sandbox.
      */
-    public declareSandbox(name: string): SandboxDeclaration {
-        let declaration = this.sandboxDeclarations[name] ?? null;
+    public declareSandbox(name: string): Promise<Sandbox> {
+        let sandboxPromise = this.sandboxPromises[name] ?? null;
 
-        if (declaration) {
-            return declaration; // Already declared.
+        if (sandboxPromise) {
+            return sandboxPromise; // Already declared.
         }
 
-        declaration = new SandboxDeclaration(name);
-        this.sandboxDeclarations[name] = declaration;
-
-        const sandboxLoadPromise = this.sandboxCreator.create(declaration);
+        sandboxPromise = this.sandboxCreator.create(name);
 
         // Ensure the stored Promise will only resolve after initialisation also completes.
-        this.sandboxInitialisationPromises[name] = sandboxLoadPromise.then(
-            async (sandbox) => {
-                await this.sandboxInitialiser.initialise(declaration, sandbox);
+        this.sandboxPromises[name] = sandboxPromise.then(async (sandbox) => {
+            this.sandboxInitialiser.initialise(sandbox);
 
-                return sandbox;
-            },
-        );
+            return sandbox;
+        });
 
-        return declaration;
+        return sandboxPromise;
     }
 
     /**
      * Fetches a declared sandbox, resolving once it has completed initialisation.
+     *
+     * This will wait for all sandboxee scripts executed so far to either succeed or fail,
+     * resolving the promise regardless once all have executed.
+     *
+     * Note that it is possible for further scripts to execute and call .quarantine(...)
+     * after this point, in which case it is necessary to:
+     *
+     * `await quarantiner.getSandbox(...).getPendingSandboxeePromise()`.
      */
-    public getSandbox(name: string): Promise<Sandbox> {
-        const sandboxInitialisationPromise =
-            this.sandboxInitialisationPromises[name] ?? null;
+    public async getSandbox(name: string): Promise<Sandbox> {
+        const sandboxPromise = this.sandboxPromises[name] ?? null;
 
-        if (sandboxInitialisationPromise === null) {
+        if (sandboxPromise === null) {
             throw new Error(
                 `No sandbox with name "${name}" has been declared.`,
             );
         }
 
-        return sandboxInitialisationPromise;
+        // Await execution of any pending scripts up to this point.
+        return (await sandboxPromise).getPendingSandboxeePromise();
+    }
+
+    /**
+     * Adds a script to be executed inside a sandbox that may or may not have initialised yet.
+     */
+    public async sandboxScript(
+        name: string,
+        scriptSrc: string,
+    ): Promise<Sandbox> {
+        const sandbox = await this.declareSandbox(name);
+
+        const scriptExecutionPromise = sandbox.loadScript(scriptSrc);
+
+        // Wait for the script to execute before resolving this .sandboxScript(...) promise.
+        await scriptExecutionPromise;
+
+        return sandbox;
     }
 }

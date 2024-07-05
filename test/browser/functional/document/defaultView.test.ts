@@ -29,8 +29,8 @@ describe('Document .defaultView handling', () => {
             window.document.defaultView.myValue = 21;
         });
         `);
+        // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
-        await sandbox.getPendingSandboxeePromise(); // Wait for the script above to be re-executed inside the sandbox.
 
         expect(writableWindow.myValue).to.be.undefined;
         expect(sandbox.getGlobal('myValue')).to.equal(21);

@@ -25,7 +25,7 @@ const sandboxRepository = new SandboxRepository(
 const mainContextEntrypoint: Entrypoint = async (
     _wrapper: WrapperFunction,
     config: ConfigOptions = { globals: {}, sandbox: 'default' },
-): Promise<void> => {
+): Promise<Sandbox> => {
     const currentScript = document.currentScript ?? null;
 
     if (currentScript === null) {
@@ -36,39 +36,31 @@ const mainContextEntrypoint: Entrypoint = async (
         throw new Error('Quarantiner :: Not called from a script');
     }
 
-    const sandboxName = config.sandbox;
-
-    const sandboxDeclaration = sandboxRepository.declareSandbox(sandboxName);
+    const globalsConfig = config.globals ?? {};
+    const sandboxName = config.sandbox ?? 'default';
     let sandbox: Sandbox | null = null;
-
-    sandboxRepository.getSandbox(sandboxName).then((initialisedSandbox) => {
-        sandbox = initialisedSandbox;
-
-        sandbox.addPendingSandboxee(pendingSandboxeePromise);
-    });
 
     // Capture the src of the script, as we will need to load it again inside the sandbox iframe.
     const currentScriptSrc = (currentScript as HTMLScriptElement).src;
 
-    let loaded = false;
     const queuesByGlobalName: { [globalName: string]: CallQueue } = {};
 
-    for (const globalName of Object.keys(config.globals)) {
+    for (const globalName of Object.keys(globalsConfig)) {
         // Queue of calls to the global function before it is defined
         // by the code when run inside the sandbox, to be replayed when defined.
         const queue: CallQueue = [];
 
         queuesByGlobalName[globalName] = queue;
 
-        if (config.globals[globalName].type !== 'function') {
+        if (globalsConfig[globalName].type !== 'function') {
             throw new Error('Quarantiner :: Only functions supported for now');
         }
 
         Object.defineProperty(mainWindow, globalName, {
             get() {
                 return async (...args: unknown[]) => {
-                    if (loaded) {
-                        const globalValue = (sandbox as Sandbox).getGlobal(
+                    if (sandbox !== null) {
+                        const globalValue = sandbox.getGlobal(
                             globalName,
                         ) as GlobalFunction;
 
@@ -93,42 +85,28 @@ const mainContextEntrypoint: Entrypoint = async (
         });
     }
 
-    const pendingSandboxeePromise = new Promise<void>((resolve, reject) => {
-        sandboxDeclaration.addSandboxeeSpec({
-            src: currentScriptSrc,
+    sandbox = await sandboxRepository.sandboxScript(
+        sandboxName,
+        currentScriptSrc,
+    );
 
-            onerror(error: unknown) {
-                // Script failed to load inside the sandbox iframe.
+    // Replay any calls that happened against this global during load now that the sandbox has loaded.
+    for (const globalName of Object.keys(globalsConfig)) {
+        const queue = queuesByGlobalName[globalName];
+        const globalValue = sandbox.getGlobal(globalName) as GlobalFunction;
+
+        for (const { args, resolve, reject } of queue) {
+            try {
+                resolve(globalValue(...args));
+            } catch (error) {
                 reject(error);
-            },
+            }
+        }
 
-            onload() {
-                // Script loaded inside the sandbox iframe successfully.
-                loaded = true;
-                resolve();
+        queue.length = 0;
+    }
 
-                // Replay any calls that happened against this global during load now that the sandbox has loaded.
-                for (const globalName of Object.keys(config.globals)) {
-                    const queue = queuesByGlobalName[globalName];
-                    const globalValue = (sandbox as Sandbox).getGlobal(
-                        globalName,
-                    ) as GlobalFunction;
-
-                    for (const { args, resolve, reject } of queue) {
-                        try {
-                            resolve(globalValue(...args));
-                        } catch (error) {
-                            reject(error);
-                        }
-                    }
-
-                    queue.length = 0;
-                }
-            },
-        });
-    });
-
-    await pendingSandboxeePromise;
+    return sandbox;
 };
 
 export const getSandbox = sandboxGetter;

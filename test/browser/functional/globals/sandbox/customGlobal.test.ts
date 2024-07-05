@@ -32,8 +32,8 @@ describe('Custom globals handling', () => {
             top.myCustomGlobalOnTop = 24;
         });
         `);
+        // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
-        await sandbox.getPendingSandboxeePromise(); // Wait for the script above to be re-executed inside the sandbox.
 
         expect(writableWindow.myCustomGlobalOnWindow).to.be.undefined;
         expect(writableWindow.myCustomGlobalOnSelf).to.be.undefined;

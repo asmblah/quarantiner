@@ -32,8 +32,8 @@ describe('Document DOM element .ownerDocument handling', () => {
             div.ownerDocument.myValue = 101;
         });
         `);
+        // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
-        await sandbox.getPendingSandboxeePromise(); // Wait for the script above to be re-executed inside the sandbox.
 
         expect((document as unknown as WritableObject).myValue).to.equal(101);
         expect(
