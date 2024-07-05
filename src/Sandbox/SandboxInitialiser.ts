@@ -62,6 +62,23 @@ export default class SandboxInitialiser {
                 get(target: Window, property: string | symbol): unknown {
                     return proxyValue(target, property);
                 },
+
+                set(
+                    target: Window,
+                    property: string,
+                    newValue: unknown,
+                ): boolean {
+                    /*
+                     * Set properties directly on the window object,
+                     * as allowing them to be set via the default proxy trap results in:
+                     *
+                     * `Uncaught TypeError: 'set event' called on an object that does not implement interface Window.`.
+                     */
+                    (target as typeof window & WritableObject)[property] =
+                        newValue;
+
+                    return true;
+                },
             });
             proxySet.add(proxy);
 
