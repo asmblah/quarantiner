@@ -29,6 +29,7 @@ export default class SandboxInitialiser {
 
         // Instead of a long list, add a Symbol to each prototype to check for, for speed.
         for (const BomOrDomClass of [
+            mainWindow.HTMLAllCollection,
             mainWindow.HTMLCollection,
             mainWindow.HTMLFormControlsCollection,
             mainWindow.Node,
