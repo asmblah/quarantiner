@@ -38,7 +38,7 @@ type GlobalObjectWithUmdGlobal = {
 type GlobalObject = WritableGlobalObject | GlobalObjectWithUmdGlobal;
 
 type WritableObject = {
-    [property: string]: unknown;
+    [property: string | symbol]: unknown;
 };
 
 type SandboxeeSpec = {
