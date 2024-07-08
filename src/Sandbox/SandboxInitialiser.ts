@@ -27,9 +27,11 @@ export default class SandboxInitialiser {
     public initialise(sandbox: Sandbox): void {
         const mainWindow = this.mainWindow;
 
+        const HtmlAllCollection = mainWindow.HTMLAllCollection;
+
         // Instead of a long list, add a Symbol to each prototype to check for, for speed.
         for (const BomOrDomClass of [
-            mainWindow.HTMLAllCollection,
+            HtmlAllCollection,
             mainWindow.HTMLCollection,
             mainWindow.HTMLFormControlsCollection,
             mainWindow.Node,
@@ -126,6 +128,19 @@ export default class SandboxInitialiser {
         };
 
         const proxyValue = (value: unknown): unknown => {
+            const valueType = typeof value;
+
+            if (
+                value === null ||
+                (valueType !== 'object' &&
+                    valueType !== 'function' &&
+                    // `document.all`'s type is "undefined" for historical reasons.
+                    !(value instanceof HtmlAllCollection))
+            ) {
+                // Scalar values require no special handling.
+                return value;
+            }
+
             if (proxyMap.has(value as WeakKey)) {
                 return proxyMap.get(value as WeakKey);
             }

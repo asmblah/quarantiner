@@ -34,4 +34,32 @@ describe('Window property handling', () => {
             'click',
         );
     });
+
+    it('should allow properties to be set and fetched with a value of null', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            window.myProperty = null;
+            
+            window.myResult = (window.myProperty === null);
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(sandbox.getGlobal('myResult')).to.be.true;
+    });
+
+    it('should allow properties to be set and fetched with a value of undefined', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            window.myProperty = undefined;
+            
+            window.myResult = (window.myProperty === undefined);
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(sandbox.getGlobal('myResult')).to.be.true;
+    });
 });
