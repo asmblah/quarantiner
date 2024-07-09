@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadJsAsScript, loadScript } from 'buildbelt';
 
-describe('Document DOM HTMLCollection handling', () => {
+describe('DOM HTMLFormControlsCollection handling', () => {
     let quarantiner: UmdGlobal;
     let writableWindow: WritableGlobalObject;
 
@@ -23,12 +23,20 @@ describe('Document DOM HTMLCollection handling', () => {
             .quarantiner;
     });
 
-    it('should return the sandbox window for htmlCollection[N].ownerDocument.defaultView', async () => {
+    it('should return the sandbox window for htmlFormControlsCollection[N].ownerDocument.defaultView', async () => {
         await loadJsAsScript(`
         quarantiner.quarantine(function (parent, self, top, window) {
-            var htmlCollection = window.document.getElementsByTagName('body');
+            var form = window.document.createElement('form');
+            window.document.body.appendChild(form);
             
-            htmlCollection[0].ownerDocument.defaultView.myValue = 101;
+            var field = window.document.createElement('input');
+            field.type = 'text';
+            field.name = 'myField';
+            form.appendChild(field);
+            
+            var htmlFormControlsCollection = form.elements;
+            
+            htmlFormControlsCollection[0].ownerDocument.defaultView.myValue = 101;
         });
         `);
         // Wait for the script above to be re-executed inside the sandbox.

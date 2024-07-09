@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadJsAsScript, loadScript } from 'buildbelt';
 
-describe('Document DOM Element handling', () => {
+describe('DOM Element handling', () => {
     let quarantiner: UmdGlobal;
     let writableWindow: WritableGlobalObject;
 

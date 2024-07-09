@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadJsAsScript, loadScript } from 'buildbelt';
 
-describe('Document DOM NodeList handling', () => {
+describe('DOM HTMLAllCollection handling', () => {
     let quarantiner: UmdGlobal;
     let writableWindow: WritableGlobalObject;
 
@@ -23,12 +23,12 @@ describe('Document DOM NodeList handling', () => {
             .quarantiner;
     });
 
-    it('should return the sandbox window for nodeList[N].ownerDocument.defaultView', async () => {
+    it('should return the sandbox window for htmlAllCollection[N].ownerDocument.defaultView', async () => {
         await loadJsAsScript(`
         quarantiner.quarantine(function (parent, self, top, window) {
-            var nodeList = window.document.documentElement.childNodes;
+            var htmlAllCollection = window.document.all;
             
-            nodeList[0].ownerDocument.defaultView.myValue = 101;
+            htmlAllCollection[0].ownerDocument.defaultView.myValue = 101;
         });
         `);
         // Wait for the script above to be re-executed inside the sandbox.
