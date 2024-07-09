@@ -2,14 +2,14 @@
 
 [![Build Status](https://github.com/asmblah/quarantiner/workflows/CI/badge.svg)](https://github.com/asmblah/quarantiner/actions?query=workflow%3ACI)
 
-[EXPERIMENTAL] Isolates scripts that may modify prototypes by running them inside an `<iframe>`.
+[EXPERIMENTAL] Isolates scripts that may modify prototypes by running them inside an `<iframe>` realm.
 
 ## What is it?
 
 This is **not** a security-focused sandbox. It is expected (for now) that a script
 will be able to escape the sandbox if intentional.
 
-The main purpose of this sandbox is to provide a _lightweight_ isolated script environment
+The main purpose of this sandbox is to provide a _lightweight_ isolated script environment (realm)
 so that incompatible or badly-behaving scripts that modify global objects
 or global prototypes can be isolated enough from each other to function together.
 
@@ -37,7 +37,7 @@ A global object `quarantiner` will be installed, which is actually defined by th
         config: ConfigOptions = { globals: {}, sandbox: 'default' }
     ): Promise<void>
     ```
-  - `wrapper`: a function that defines a script to be executed inside the sandbox.
+  - `wrapper`: a function that defines a script to be executed inside the sandbox realm.
   - `config`: an optional configuration object:
     - `config.globals`: globals that are expected to be defined by the script,
                         that should then be defined as globals on the main window/global object.
