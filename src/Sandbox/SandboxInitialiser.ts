@@ -254,6 +254,32 @@ export default class SandboxInitialiser {
                         return proxyObjectProperty(target, property);
                     },
 
+                    getPrototypeOf(target: T): object | null {
+                        const constructorName =
+                            target.constructor?.name ?? null;
+
+                        // TODO: Cache prototype for efficiency (see below).
+
+                        if (constructorName !== null) {
+                            // We have a constructor name - look up the constructor within
+                            // the sandbox window realm, so we can create a prototype extending its own.
+                            const sandboxRealmConstructor: WritableCallableFunction | null =
+                                ((sandboxWindow as WritableWindow)[
+                                    constructorName
+                                ] as WritableCallableFunction) ?? null;
+
+                            if (sandboxRealmConstructor !== null) {
+                                // TODO: Cache this prototype object in a WeakMap for efficiency.
+                                return Object.create(
+                                    sandboxRealmConstructor.prototype,
+                                );
+                            }
+                        }
+
+                        // We do not have a constructor property to look up.
+                        return Object.getPrototypeOf(target);
+                    },
+
                     set(
                         target: T,
                         property: string,
