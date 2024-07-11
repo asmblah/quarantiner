@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadJsAsScript, loadScript } from 'buildbelt';
 
-describe('Standard built-in Proxy handling', () => {
+describe('DOM CaretPosition handling', () => {
     let quarantiner: UmdGlobal;
     let writableWindow: WritableGlobalObject;
 
@@ -23,28 +23,32 @@ describe('Standard built-in Proxy handling', () => {
             .quarantiner;
     });
 
-    it('should support assigning and fetching Proxies from proxied objects', async () => {
+    it('should correctly proxy the CaretPosition fetched from document.caretPositionFromPoint(...)', async () => {
         await loadJsAsScript(`
         quarantiner.quarantine(function (parent, self, top, window) {
-            window.myProxy = new window.Proxy(() => {}, {
-                apply() {
-                    return 'my result from apply(...) trap';
-                },
-                
-                get(target, property) {
-                    throw new Error(\`get("\${String(property)}") :: I should not be reached\`);
-                }
+            const div = window.document.createElement('div');
+            Object.assign(div.style, {
+                height: '100px',
+                left: 0,
+                position: 'absolute',
+                top: 0,
+                width: '100px',
+                zIndex: 1000,
             });
+            div.textContent = 'Hello world!';
+            window.document.body.appendChild(div);
             
-            window.myResult = window.myProxy();
+            const caretPosition = window.document.caretPositionFromPoint(50, 50);
+            
+            // Access the sandbox window via the Node provided by the CaretPosition to check proxying behaviour,
+            // and also test the selection behaviour itself by extracting the selected text.
+            caretPosition.offsetNode.ownerDocument.defaultView.myResult = caretPosition.offsetNode.textContent;
         });
         `);
         // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
 
         expect(writableWindow.myResult).to.be.undefined;
-        expect(sandbox.getGlobal('myResult')).to.equal(
-            'my result from apply(...) trap',
-        );
+        expect(sandbox.getGlobal('myResult')).to.equal('Hello world!');
     });
 });

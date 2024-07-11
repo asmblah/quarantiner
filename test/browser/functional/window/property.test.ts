@@ -24,7 +24,7 @@ describe('Window property handling', () => {
     it('should allow window.event to be set', async () => {
         await loadJsAsScript(`
         quarantiner.quarantine(function (parent, self, top, window) {
-            window.event = new Event('click');
+            window.event = new window.Event('click');
         });
         `);
         // Wait for the script above to be re-executed inside the sandbox.
@@ -61,5 +61,39 @@ describe('Window property handling', () => {
         const sandbox = await quarantiner.getSandbox();
 
         expect(sandbox.getGlobal('myResult')).to.be.true;
+    });
+
+    it('should allow method properties to be set and fetched that modify function arguments', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            window.myArgModifier = (aFunction) => {
+                window.Object.defineProperty(aFunction, 'myNewProp', { value: 21 });
+            };
+            
+            const myFunction = () => {};
+            window.myArgModifier(myFunction);
+            
+            window.myResult = myFunction.myNewProp;
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(sandbox.getGlobal('myResult')).to.equal(21);
+    });
+
+    it('should allow array properties to be set and fetched that contain non-writable non-configurable properties', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            // Mapped template literals define such a property as ".raw".
+            window.myArrayProperty = (t => t)\`hello\`;
+            
+            window.myResult = window.myArrayProperty.raw;
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(sandbox.getGlobal('myResult')).to.deep.equal(['hello']);
     });
 });

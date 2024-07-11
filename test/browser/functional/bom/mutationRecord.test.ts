@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadJsAsScript, loadScript } from 'buildbelt';
 
-describe('Standard built-in Proxy handling', () => {
+describe('BOM MutationRecord handling', () => {
     let quarantiner: UmdGlobal;
     let writableWindow: WritableGlobalObject;
 
@@ -23,28 +23,27 @@ describe('Standard built-in Proxy handling', () => {
             .quarantiner;
     });
 
-    it('should support assigning and fetching Proxies from proxied objects', async () => {
+    it('should correctly proxy MutationRecords from MutationObservers', async () => {
         await loadJsAsScript(`
         quarantiner.quarantine(function (parent, self, top, window) {
-            window.myProxy = new window.Proxy(() => {}, {
-                apply() {
-                    return 'my result from apply(...) trap';
-                },
+            const observer = new window.MutationObserver((mutationList, observer) => {
+                const mutationRecord = mutationList[0];
                 
-                get(target, property) {
-                    throw new Error(\`get("\${String(property)}") :: I should not be reached\`);
-                }
+                mutationRecord.target.ownerDocument.defaultView.myResult = 'my result';
             });
             
-            window.myResult = window.myProxy();
+            const body = window.document.body;
+            
+            observer.observe(body, { attributes: true, childList: true, subtree: true });
+            
+            // Set an attribute to trigger a mutation callback.
+            body.setAttribute('data-my-attr', 'hello');
         });
         `);
         // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
 
         expect(writableWindow.myResult).to.be.undefined;
-        expect(sandbox.getGlobal('myResult')).to.equal(
-            'my result from apply(...) trap',
-        );
+        expect(sandbox.getGlobal('myResult')).to.equal('my result');
     });
 });

@@ -26,9 +26,11 @@ type ConfigOptions = {
     sandbox: string;
 };
 
-type GlobalFunction = (...args: unknown[]) => unknown;
+type WritableCallableFunction = ((...args: unknown[]) => unknown) &
+    WritableObject;
+
 type WritableGlobalObject = {
-    [property: string]: GlobalFunction;
+    [property: string]: unknown;
 };
 
 type GlobalObjectWithUmdGlobal = {

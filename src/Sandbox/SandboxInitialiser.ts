@@ -9,10 +9,9 @@
 
 import Sandbox from './Sandbox';
 
-const BOMDOM = Symbol('BOM/DOM');
+const BOM_OR_DOM = Symbol('BOM/DOM');
 const FunctionToString = Function.prototype.toString;
 
-type CallableFunction = ((...args: unknown[]) => unknown) & WritableObject;
 type WritableDocument = Document & WritableObject;
 type WritableWindow = Window & typeof globalThis & WritableObject;
 
@@ -32,14 +31,34 @@ export default class SandboxInitialiser {
 
         const contentWindow = sandbox.getContentWindow();
 
-        const writableSandboxWindow = contentWindow as unknown as GlobalObject;
+        const writableSandboxWindow =
+            contentWindow as unknown as WritableGlobalObject;
         const sandboxWindow = contentWindow as Window & typeof globalThis;
+
+        const sandboxGlobals = new Map<string | symbol, unknown>([
+            ['Array', sandboxWindow.Array],
+            ['Map', sandboxWindow.Map],
+            ['Object', sandboxWindow.Object],
+            ['Set', sandboxWindow.Set],
+            ['WeakMap', sandboxWindow.WeakMap],
+            ['WeakSet', sandboxWindow.WeakSet],
+        ]);
 
         // A map from Proxies to the original object, such as the Document.
         const reverseProxyMap = new WeakMap();
 
         // A map from original objects, such as the Document, to its Proxy.
         const proxyMap = new WeakMap();
+
+        const mainWindowArrayPrototype = mainWindow.Array.prototype;
+        const sandboxWindowArrayPrototype = sandboxWindow.Array.prototype;
+
+        // We cannot rely on Array.isArray(...) alone, as that will return true
+        // for Array.prototype itself too.
+        const isArray = (value: unknown): value is unknown[] =>
+            Array.isArray(value) &&
+            value !== mainWindowArrayPrototype &&
+            value !== sandboxWindowArrayPrototype;
 
         const storeProxy = (
             originalValue: unknown,
@@ -51,7 +70,9 @@ export default class SandboxInitialiser {
             return proxy;
         };
 
-        const isNativeFunction = (value: unknown): value is CallableFunction =>
+        const isNativeFunction = (
+            value: unknown,
+        ): value is WritableCallableFunction =>
             typeof value === 'function' &&
             /^function\s+[\w_]+\(\)\s*\{\s*\[native code]/.test(
                 FunctionToString.call(value),
@@ -59,7 +80,7 @@ export default class SandboxInitialiser {
 
         const createProxyIfNeeded = (value: unknown): unknown => {
             // Instead of a long list, check for a Symbol added to each prototype for speed.
-            if ((value as WritableObject)[BOMDOM] === true) {
+            if ((value as WritableObject)[BOM_OR_DOM] === true) {
                 return createBomOrDomObjectProxy(
                     value as typeof value & WritableObject,
                 );
@@ -70,6 +91,49 @@ export default class SandboxInitialiser {
                 return createBomOrDomObjectProxy(value);
             }
 
+            if (isArray(value)) {
+                /*
+                 * Array elements will be proxied if needed on fetch, etc.
+                 * We could map to a new array, but this way we save
+                 * by not needing to iterate over all elements
+                 * and modifications to the original array will affect the proxy.
+                 */
+                return createBomOrDomObjectProxy(
+                    value as typeof value & WritableObject,
+
+                    /*
+                     * Any additional array properties should be passed unmodified,
+                     * as if they are both non-writable and non-configurable
+                     * then the Proxy must return them unmodified (one of the Proxy API invariants),
+                     * and we do not want the overhead of looking up property descriptors.
+                     */
+                    (target, property) => {
+                        if (Number.isInteger(property)) {
+                            // Fast case: array elements' properties should not be non-configurable/writable,
+                            // so just fetch as normal and not check descriptor for speed.
+                            return proxyProperty(target, property);
+                        }
+
+                        const descriptor = Object.getOwnPropertyDescriptor(
+                            target,
+                            property,
+                        );
+
+                        if (
+                            !descriptor ||
+                            descriptor.configurable ||
+                            descriptor.writable
+                        ) {
+                            // Property is configurable or writable, so we can proxy it.
+                            return proxyProperty(target, property);
+                        }
+
+                        return (target as WritableObject)[property];
+                    },
+                );
+            }
+
+            // There is no need to proxy the value, for efficiency.
             return value;
         };
 
@@ -102,8 +166,51 @@ export default class SandboxInitialiser {
             return createProxyIfNeeded(value);
         };
 
+        /*
+         * Maps proxied values back to their originals.
+         * For example, only the native un-Proxy-wrapped DOM element
+         * must be passed into `.appendChild(...)`.
+         */
+        const unproxyValue = (value: unknown): unknown => {
+            if (reverseProxyMap.has(value as WeakKey)) {
+                return reverseProxyMap.get(value as WeakKey);
+            }
+
+            if (typeof value === 'function') {
+                /*
+                 * Value is a function, e.g. the callback passed to .addEventListener(...).
+                 * We need to map any applicable arguments, e.g. wrapping an Event with a Proxy<Event>.
+                 *
+                 * Use a Proxy so that Object.defineProperty(...) will define properties
+                 * on the original function object, etc.
+                 */
+                return new Proxy(value, {
+                    apply(
+                        target: WritableCallableFunction,
+                        thisArg: unknown,
+                        args: unknown[],
+                    ) {
+                        return target.apply(
+                            thisArg,
+                            args.map((arg) => proxyValue(arg)),
+                        );
+                    },
+                });
+            }
+
+            if (isArray(value)) {
+                return value.map((element) => unproxyValue(element));
+            }
+
+            return value;
+        };
+
+        const unproxyArgs = (args: unknown[]): unknown[] =>
+            args.map((arg) => unproxyValue(arg));
+
         const createBomOrDomObjectProxy = <T extends WritableObject>(
             bomOrDomObject: T,
+            proxyObjectProperty = proxyProperty,
         ) => {
             return storeProxy(
                 bomOrDomObject,
@@ -114,43 +221,37 @@ export default class SandboxInitialiser {
                         args: unknown[],
                     ): unknown {
                         // Map `this` back to its original if applicable (see below).
-                        const unmappedThisObject = (
+                        const unproxiedThisObject = (
                             reverseProxyMap.has(thisArg as WeakKey)
                                 ? reverseProxyMap.get(thisArg as WeakKey)
                                 : thisArg
                         ) as object;
 
-                        /*
-                         * Map proxied values back to their originals.
-                         * For example, only the native un-Proxy-wrapped DOM element
-                         * must be passed into `.appendChild(...)`.
-                         */
-                        const unmappedArgs = args.map((arg) =>
-                            reverseProxyMap.has(arg as WeakKey)
-                                ? reverseProxyMap.get(arg as WeakKey)
-                                : arg,
-                        );
+                        const unproxiedArgs = unproxyArgs(args);
 
                         return proxyValue(
                             (
-                                bomOrDomObject as unknown as CallableFunction
-                            ).apply(unmappedThisObject, unmappedArgs),
+                                bomOrDomObject as unknown as WritableCallableFunction
+                            ).apply(unproxiedThisObject, unproxiedArgs),
                         );
                     },
 
-                    construct(target: T, argArray: unknown[]): object {
+                    construct(target: T, args: unknown[]): object {
+                        const unproxiedArgs = unproxyArgs(args);
+
                         return proxyValue(
                             Reflect.construct(
+                                // NB: `target` here is the original constructor being proxied.
                                 target as unknown as new (
                                     ...args: unknown[]
                                 ) => unknown,
-                                argArray,
+                                unproxiedArgs,
                             ),
                         ) as object;
                     },
 
                     get(target: T, property: string | symbol): unknown {
-                        return proxyProperty(target, property);
+                        return proxyObjectProperty(target, property);
                     },
 
                     set(
@@ -174,6 +275,13 @@ export default class SandboxInitialiser {
 
         const sandboxWindowProxy = createBomOrDomObjectProxy(
             sandboxWindow as typeof window & WritableObject,
+            (target, property) => {
+                if (sandboxGlobals.has(property)) {
+                    return sandboxGlobals.get(property);
+                }
+
+                return proxyProperty(target, property);
+            },
         ) as WritableWindow;
 
         const mainDocumentProxy = createBomOrDomObjectProxy(
@@ -192,34 +300,60 @@ export default class SandboxInitialiser {
         // Sandbox document should not (easily) be accessible - redirect to the main document's.
         proxyMap.set(sandboxWindow.document, mainDocumentProxy);
 
+        const markAsProxiable = (value: unknown) => {
+            (value as WritableObject)[BOM_OR_DOM] = true;
+        };
+
         const hookBom = () => {
-            for (const bomClassName of ['MutationObserver']) {
-                const bomClass = (sandboxWindow as WritableWindow)[
+            // TODO: Can this be done the same as for the DOM, without overriding anything (other options mentioned elsewhere)?
+            //       Need to consider that MutationObserver is meant to be instantiated by the user.
+            for (const bomClassName of ['MutationObserver', 'MutationRecord']) {
+                const bomClass = writableSandboxWindow[
                     bomClassName
-                ] as CallableFunction;
+                ] as WritableCallableFunction;
 
-                // TODO: Consider never overriding built-ins in this way (which may be blocked
-                //       due to property being non-configurable etc., instead return from globalThis/Window Proxy trap.
-                (sandboxWindow as WritableWindow)[bomClassName] =
-                    createBomOrDomObjectProxy(bomClass);
+                sandboxGlobals.set(
+                    bomClassName,
+                    createBomOrDomObjectProxy(bomClass),
+                );
 
-                bomClass.prototype[BOMDOM] = true;
+                markAsProxiable(bomClass.prototype);
             }
+
+            sandboxGlobals.set('focus', () => mainWindow.focus());
+            sandboxGlobals.set(
+                'getSelection',
+                () => proxyValue(mainWindow.getSelection()) as Selection | null,
+            );
         };
 
         const hookDom = () => {
             // Instead of a long list, add a Symbol to each prototype to check for, for speed.
             for (const DomClass of [
                 HtmlAllCollection,
+                mainWindow.Event, // TODO: Ensure both of these are covered by tests.
+                sandboxWindow.Event,
+                mainWindow.EventTarget,
                 mainWindow.HTMLCollection,
                 mainWindow.HTMLFormControlsCollection,
                 mainWindow.Node,
                 mainWindow.NodeList,
+                mainWindow.Range,
+                mainWindow.Selection,
             ]) {
+                markAsProxiable(DomClass.prototype);
+            }
+
+            // CaretPosition is experimental, but supported in Firefox at time of writing.
+            const CaretPosition =
                 (
-                    DomClass.prototype as typeof DomClass.prototype &
-                        WritableObject
-                )[BOMDOM] = true;
+                    mainWindow as typeof mainWindow & {
+                        CaretPosition: WritableCallableFunction;
+                    }
+                ).CaretPosition ?? null;
+
+            if (CaretPosition !== null) {
+                markAsProxiable(CaretPosition.prototype);
             }
         };
 
@@ -235,27 +369,24 @@ export default class SandboxInitialiser {
                               ...handler,
 
                               /**
-                               * Override the get trap with one that will always handle our special BOMDOM symbol.
+                               * Override the get trap with one that will always handle our special BOM_OR_DOM symbol.
                                */
                               get(
                                   target: T,
                                   property: string | symbol,
                                   receiver: unknown,
                               ): unknown {
-                                  if (property === BOMDOM) {
+                                  if (property === BOM_OR_DOM) {
                                       // Don't allow a custom Proxy to handle fetches
-                                      // of the special BOMDOM symbol property.
+                                      // of the special BOM_OR_DOM symbol property.
                                       return (target as WritableObject)[
                                           property
                                       ];
                                   }
 
-                                  return (getTrap as CallableFunction).call(
-                                      this,
-                                      target,
-                                      property,
-                                      receiver,
-                                  );
+                                  return (
+                                      getTrap as WritableCallableFunction
+                                  ).call(target, target, property, receiver);
                               },
                           }
                         : handler;
@@ -268,9 +399,7 @@ export default class SandboxInitialiser {
                 }
             }
 
-            // TODO: Not modify globalThis, see above.
-            (sandboxWindow as WritableWindow).Proxy =
-                SandboxedProxy as ProxyConstructor;
+            sandboxGlobals.set('Proxy', SandboxedProxy as ProxyConstructor);
         };
 
         hookStandard();
@@ -292,7 +421,7 @@ export default class SandboxInitialiser {
         // for when the script re-executes inside the sandbox.
         writableSandboxWindow.quarantiner = {
             getSandbox: this.getSandbox,
-            quarantine: sandboxContextEntrypoint as GlobalFunction,
+            quarantine: sandboxContextEntrypoint,
         };
     }
 }

@@ -62,7 +62,9 @@ const mainContextEntrypoint: Entrypoint = async (
                     if (sandbox !== null) {
                         const globalValue = sandbox.getGlobal(
                             globalName,
-                        ) as GlobalFunction;
+                        ) as WritableCallableFunction;
+
+                        // TODO: Check that the global was in fact defined, otherwise raise error.
 
                         return globalValue(...args);
                     }
@@ -93,7 +95,11 @@ const mainContextEntrypoint: Entrypoint = async (
     // Replay any calls that happened against this global during load now that the sandbox has loaded.
     for (const globalName of Object.keys(globalsConfig)) {
         const queue = queuesByGlobalName[globalName];
-        const globalValue = sandbox.getGlobal(globalName) as GlobalFunction;
+        const globalValue = sandbox.getGlobal(
+            globalName,
+        ) as WritableCallableFunction;
+
+        // TODO: Check that the global was in fact defined, otherwise raise error.
 
         for (const { args, resolve, reject } of queue) {
             try {

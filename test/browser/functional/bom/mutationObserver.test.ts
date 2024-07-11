@@ -29,11 +29,11 @@ describe('BOM MutationObserver handling', () => {
             const log = [];
             
             const observer = new window.MutationObserver((mutationList, observer) => {
-                for (const mutation of mutationList) {
-                    if (mutation.type === 'childList') {
+                for (const mutationRecord of mutationList) {
+                    if (mutationRecord.type === 'childList') {
                         log.push('A child node was added or removed.');
-                    } else if (mutation.type === 'attributes') {
-                        log.push(\`The \${mutation.attributeName} attribute was modified.\`);
+                    } else if (mutationRecord.type === 'attributes') {
+                        log.push(\`The \${mutationRecord.attributeName} attribute was modified.\`);
                     }
                 }
             });
