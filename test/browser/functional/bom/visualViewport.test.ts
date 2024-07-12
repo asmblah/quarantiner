@@ -10,7 +10,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { loadJsAsScript, loadScript } from 'buildbelt';
 
-describe('DOM instanceof handling', () => {
+describe('BOM .visualViewport handling', () => {
     let quarantiner: UmdGlobal;
     let writableWindow: WritableGlobalObject;
 
@@ -23,27 +23,19 @@ describe('DOM instanceof handling', () => {
             .quarantiner;
     });
 
-    it('should support the proxied sandbox window being instanceof sandbox global class Window', async () => {
+    it('should return the main window extents for window.visualViewport', async () => {
         await loadJsAsScript(`
         quarantiner.quarantine(function (parent, self, top, window) {
-            window.myResult = window instanceof window.Window;
-        });
-        `);
-        // Wait for the script above to be re-executed inside the sandbox.
-        const sandbox = await quarantiner.getSandbox();
-
-        expect(writableWindow.myResult).to.be.undefined;
-        expect(sandbox.getGlobal('myResult')).to.be.true;
-    });
-
-    it('should support proxied DOM objects being instanceof sandbox global classes', async () => {
-        await loadJsAsScript(`
-        quarantiner.quarantine(function (parent, self, top, window) {
-            const div = window.document.createElement('div');
+            const visualViewport = window.visualViewport;
             
             window.myResult = {
-                'instanceof HTMLDivElement': div instanceof window.HTMLDivElement,
-                'instanceof HTMLSpanElement': div instanceof window.HTMLSpanElement
+                offsetLeft: visualViewport.offsetLeft,
+                offsetTop: visualViewport.offsetTop,
+                pageLeft: visualViewport.pageLeft,
+                pageTop: visualViewport.pageTop,
+                width: visualViewport.width,
+                height: visualViewport.height,
+                scale: visualViewport.scale,
             };
         });
         `);
@@ -52,8 +44,13 @@ describe('DOM instanceof handling', () => {
 
         expect(writableWindow.myResult).to.be.undefined;
         expect(sandbox.getGlobal('myResult')).to.deep.equal({
-            'instanceof HTMLDivElement': true,
-            'instanceof HTMLSpanElement': false,
+            offsetLeft: window.visualViewport?.offsetLeft,
+            offsetTop: window.visualViewport?.offsetTop,
+            pageLeft: window.visualViewport?.pageLeft,
+            pageTop: window.visualViewport?.pageTop,
+            width: window.visualViewport?.width,
+            height: window.visualViewport?.height,
+            scale: window.visualViewport?.scale,
         });
     });
 });

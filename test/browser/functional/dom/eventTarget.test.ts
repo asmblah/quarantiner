@@ -65,4 +65,40 @@ describe('DOM EventTarget handling', () => {
             identical: true,
         });
     });
+
+    it('should support .removeEventListener(...)', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            var div1 = window.document.createElement('div');
+            var div2 = window.document.createElement('div');
+            
+            const firstHandler = (event) => {
+                event.target.ownerDocument.defaultView.myFirstResult = 'my first result';
+            };
+            const secondHandler = (event) => {
+                event.target.ownerDocument.defaultView.mySecondResult = 'my second result';
+            };
+            
+            div1.addEventListener('click', firstHandler);
+            div2.addEventListener('click', secondHandler);
+            
+            window.document.body.appendChild(div1);
+            window.document.body.appendChild(div2);
+            
+            div1.removeEventListener('click', firstHandler);
+            
+            div1.click();
+            div2.click();
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(writableWindow.myFirstResult).to.be.undefined;
+        expect(writableWindow.mySecondResult).to.be.undefined;
+        expect(sandbox.getGlobal('myFirstResult')).to.be.undefined; // As handler was removed.
+        expect(sandbox.getGlobal('mySecondResult')).to.equal(
+            'my second result',
+        );
+    });
 });

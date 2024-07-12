@@ -12,11 +12,13 @@ import { loadJsAsScript, loadScript } from 'buildbelt';
 
 describe('Window property handling', () => {
     let quarantiner: UmdGlobal;
+    let writableWindow: WritableGlobalObject;
 
     beforeEach(async () => {
         // Load Quarantiner library itself in the test runner document.
         await loadScript('/dist/quarantiner.umd.js');
 
+        writableWindow = window as unknown as WritableGlobalObject;
         quarantiner = (window as typeof window & GlobalObjectWithUmdGlobal)
             .quarantiner;
     });
@@ -46,6 +48,7 @@ describe('Window property handling', () => {
         // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
 
+        expect(writableWindow.myResult).to.be.undefined;
         expect(sandbox.getGlobal('myResult')).to.be.true;
     });
 
@@ -60,6 +63,7 @@ describe('Window property handling', () => {
         // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
 
+        expect(writableWindow.myResult).to.be.undefined;
         expect(sandbox.getGlobal('myResult')).to.be.true;
     });
 
@@ -79,6 +83,7 @@ describe('Window property handling', () => {
         // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
 
+        expect(writableWindow.myResult).to.be.undefined;
         expect(sandbox.getGlobal('myResult')).to.equal(21);
     });
 
@@ -94,6 +99,26 @@ describe('Window property handling', () => {
         // Wait for the script above to be re-executed inside the sandbox.
         const sandbox = await quarantiner.getSandbox();
 
+        expect(writableWindow.myResult).to.be.undefined;
         expect(sandbox.getGlobal('myResult')).to.deep.equal(['hello']);
+    });
+
+    it('should fetch scalar values from the main window', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            window.myResult = {
+                closed: closed,
+                innerWidth: window.innerWidth,
+            };
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(writableWindow.myResult).to.be.undefined;
+        expect(sandbox.getGlobal('myResult')).to.deep.equal({
+            closed: false,
+            innerWidth: window.innerWidth,
+        });
     });
 });

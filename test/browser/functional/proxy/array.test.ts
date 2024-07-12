@@ -46,4 +46,21 @@ describe('Proxy Array handling', () => {
 
         expect(sandbox.getGlobal('myResult')).to.equal('my value');
     });
+
+    it('should return true for Array.isArray(...) of array properties', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            const div = window.document.createElement('div');
+            window.document.body.appendChild(div);
+            
+            div.myArray = ['one', 'two'];
+            
+            window.myResult = Array.isArray(div.myArray);
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(sandbox.getGlobal('myResult')).to.be.true;
+    });
 });
