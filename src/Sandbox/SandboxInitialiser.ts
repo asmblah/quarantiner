@@ -39,7 +39,6 @@ export default class SandboxInitialiser {
 
         // Note that classes added here will not be proxied, so they are listed here for efficiency.
         const sandboxGlobals = new Map<string | symbol, unknown>([
-            ['Array', sandboxWindow.Array],
             ['Map', sandboxWindow.Map],
             ['Object', sandboxWindow.Object],
             ['Set', sandboxWindow.Set],
@@ -536,6 +535,15 @@ export default class SandboxInitialiser {
             hookEventListenerHandling();
         };
 
+        const hookArrayHandling = () => {
+            const nativeArrayFrom = sandboxWindow.Array.from;
+
+            proxyMap.set(nativeArrayFrom, <T>(array: ArrayLike<T>): unknown[] =>
+                // Proxy elements as applicable, e.g. for `Array.from(<NodeList>)`.
+                nativeArrayFrom(array, (element) => proxyValue(element)),
+            );
+        };
+
         const hookStandard = () => {
             const NativeProxy = sandboxWindow.Proxy;
 
@@ -579,6 +587,8 @@ export default class SandboxInitialiser {
             }
 
             sandboxGlobals.set('Proxy', SandboxedProxy as ProxyConstructor);
+
+            hookArrayHandling();
         };
 
         hookStandard();

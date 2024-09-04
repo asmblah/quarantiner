@@ -12,11 +12,13 @@ import { loadJsAsScript, loadScript } from 'buildbelt';
 
 describe('Proxy Array handling', () => {
     let quarantiner: UmdGlobal;
+    let writableWindow: WritableGlobalObject;
 
     beforeEach(async () => {
         // Load Quarantiner library itself in the test runner document.
         await loadScript('/dist/quarantiner.umd.js');
 
+        writableWindow = window as unknown as WritableGlobalObject;
         quarantiner = (window as typeof window & GlobalObjectWithUmdGlobal)
             .quarantiner;
     });
@@ -62,5 +64,24 @@ describe('Proxy Array handling', () => {
         const sandbox = await quarantiner.getSandbox();
 
         expect(sandbox.getGlobal('myResult')).to.be.true;
+    });
+
+    it('should proxy DOM nodes when converted from a NodeList with Array.from(...)', async () => {
+        await loadJsAsScript(`
+        quarantiner.quarantine(function (parent, self, top, window) {
+            const div = window.document.createElement('div');
+            div.id = 'myDiv';
+            window.document.body.appendChild(div);
+            
+            const nodeList = window.document.querySelectorAll('#myDiv');
+            
+            window.Array.from(nodeList)[0].ownerDocument.defaultView.myValue = 101;
+        });
+        `);
+        // Wait for the script above to be re-executed inside the sandbox.
+        const sandbox = await quarantiner.getSandbox();
+
+        expect(writableWindow.myValue).to.be.undefined;
+        expect(sandbox.getGlobal('myValue')).to.equal(101);
     });
 });
